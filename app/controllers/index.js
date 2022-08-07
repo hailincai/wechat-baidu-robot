@@ -1,9 +1,12 @@
+const { request } = require('express');
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const wechat = require('wechat');
 const jssdk = require('../libs/jssdk');
-const Article = mongoose.model('Article');
+const User = mongoose.model('User');
+
+mongoose.Promise = require('bluebird');
 
 // const baseUrl = 'http://8.210.121.79';
 
@@ -41,6 +44,41 @@ const handleWechatRequet = wechat(config, function(req, res, next) {
     res.reply('hello');
 });
 
+const handleUserSync = function(req, res, next) {
+  if (!req.query.openid) {
+    next();
+  }
+
+  const openid = req.query.openid;
+  User.findOne({openid}).exec((err, user) => {
+    if (err) {
+      return next(err);
+    }
+
+    if (user) {
+      console.log(`use existing user: ${openid}`);
+      req.user = user;
+      return next();
+    }
+
+    const newUser = new User({
+      openid,
+      createAt: new Date(),
+      conversationCount: 0
+    });
+
+    console.log(`create new user: ${openid}`);
+    newUser.save((e, u) => {
+      if (e) {
+        return next(e);
+      }
+
+      req.user = u;
+      next();
+    })
+  })
+}
+
 router.get('/conversation', handleWechatRequet);
-router.post('/conversation', handleWechatRequet);
+router.post('/conversation', handleUserSync, handleWechatRequet);
 
